@@ -5,7 +5,7 @@ from PIL import Image
 
 # Use lightweight tflite_runtime if available, otherwise fall back to full tf
 try:
-    import tflite_runtime.interpreter as tflite
+    import tensorflow as tf
 except ImportError:
     import tensorflow.lite as tflite
 
@@ -76,12 +76,8 @@ st.title('🌿 Plant Disease Detector')
 # --- 1. Load the TFLite Model ---
 @st.cache_resource
 def load_tflite_model():
-    model_path = 'plantvillage_efficientnet_b0.tflite'
-    if not os.path.exists(model_path):
-        st.error(f'Model file `{model_path}` not found in repository root!')
-        return None, None
-    
-    interpreter = tflite.Interpreter(model_path=model_path)
+    # ...
+    interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     return interpreter
 
