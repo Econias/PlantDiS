@@ -11,23 +11,22 @@ st.set_page_config(
 )
 
 # 2. Custom CSS for styling cards, shadows, and headers
+# Updated CSS: Theme-aware and compatible with Light & Dark mode
 st.markdown("""
     <style>
-    /* Clean background & card padding */
-    .stApp {
-        background-color: #f9fbf9;
-    }
+    /* Card container that adapts to both light and dark mode */
     .metric-card {
-        background-color: #ffffff;
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
         border-radius: 12px;
         padding: 20px;
-        border: 1px solid #e0e0e0;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     }
-    /* Custom header design */
-    .title-text {
-        color: #1e3a1e;
-        font-weight: 700;
+    
+    /* Ensure markdown headers respect theme text colors */
+    h1, h2, h3, h4, p {
+        color: var(--text-color) !important;
     }
     </style>
 """, unsafe_allow_html=True)
