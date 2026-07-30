@@ -76,7 +76,9 @@ st.title('🌿 Plant Disease Detector')
 # --- 1. Load the TFLite Model ---
 @st.cache_resource
 def load_tflite_model():
-    # ...
+    # Replace 'model.tflite' with your actual .tflite filename or relative path
+    model_path = "plantvillage_efficientnet_b0.tflite" 
+    
     interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     return interpreter
