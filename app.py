@@ -1,109 +1,148 @@
+import os
+import numpy as np
 import streamlit as st
 from PIL import Image
-import numpy as np
 
-# 1. Page Configuration
-st.set_page_config(
-    page_title="PlantGuard AI",
-    page_icon="🌿",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Use lightweight tflite_runtime if available, otherwise fall back to full tf
+try:
+    import tensorflow as tf
+except ImportError:
+    import tensorflow.lite as tflite
 
-# 2. Custom CSS for styling cards, shadows, and headers
-# Updated CSS: Theme-aware and compatible with Light & Dark mode
+# --- Page Setup & Dark Theme CSS ---
+st.set_page_config(page_title='Plant Disease Detector', layout='centered')
+
 st.markdown("""
     <style>
-    /* Card container that adapts to both light and dark mode */
-    .metric-card {
-        background-color: var(--secondary-background-color);
-        color: var(--text-color);
-        border-radius: 12px;
-        padding: 20px;
-        border: 1px solid rgba(128, 128, 128, 0.2);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    /* Dark background styling */
+    .stApp {
+        background-color: #0E1117;
+        color: #E0E0E0;
     }
     
-    /* Ensure markdown headers respect theme text colors */
-    h1, h2, h3, h4, p {
-        color: var(--text-color) !important;
+    /* Header title formatting */
+    h1 {
+        color: #00E676 !important;
+        font-family: 'Inter', sans-serif;
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Card container for upload/results */
+    div[data-testid="stFileUploader"], div.stButton {
+        display: flex;
+        justify-content: center;
+    }
+    
+    /* Custom primary action button */
+    .stButton > button {
+        background-color: #00C853 !important;
+        color: #FFFFFF !important;
+        border-radius: 8px;
+        padding: 0.6rem 2rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border: none;
+        transition: all 0.3s ease;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #00E676 !important;
+        box-shadow: 0 4px 15px rgba(0, 230, 118, 0.4);
+    }
+    
+    /* Prediction output card */
+    .result-card {
+        background-color: #1E2631;
+        border-left: 5px solid #00E676;
+        padding: 1.2rem;
+        border-radius: 8px;
+        margin-top: 1rem;
+    }
+    .result-title {
+        color: #00E676;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .result-value {
+        color: #FFFFFF;
+        font-size: 1.1rem;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Sidebar Setup
-with st.sidebar:
-    st.image("https://img.icons8.com/color/96/leaf.png", width=64)
-    st.title("PlantGuard AI")
-    st.caption("EfficientNet-B0 Disease Classifier")
-    st.divider()
-    st.markdown("### How it works")
-    st.markdown("""
-    1. Upload a clear photo of an affected leaf.
-    2. The model analyzes leaf textures and spots.
-    3. View instant diagnosis and care tips.
-    """)
-    st.divider()
-    st.info("Supported crops: Pepper, Potato, Tomato, and more.")
+st.title('🌿 Plant Disease Detector')
 
-# 4. Main Page Header
-st.title("🌿 Leaf Disease Analyzer")
-st.write("Upload an image of a plant leaf to detect potential diseases instantly.")
-st.divider()
-
-# 5. Two-Column Dashboard Layout
-col1, col2 = st.columns([1, 1], gap="large")
-
-with col1:
-    st.subheader("📷 Upload Sample")
-    uploaded_file = st.file_uploader(
-        "Choose a leaf image...", 
-        type=["jpg", "jpeg", "png"],
-        help="Upload a clear image under good lighting"
-    )
-
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
-
-with col2:
-    st.subheader("🔍 Analysis & Diagnosis")
+# --- 1. Load the TFLite Model ---
+@st.cache_resource
+def load_tflite_model():
+    # Replace 'model.tflite' with your actual .tflite filename or relative path
+    model_path = "plantvillage_efficientnet_b0.tflite" 
     
-    if uploaded_file is not None:
-        with st.spinner("Analyzing leaf features..."):
-            # --- Place your model inference code here ---
-            # E.g., processed_img = preprocess(image)
-            # predictions = interpreter.predict(...)
-            
-            # Simulated dummy outputs for UI preview:
-            top_class = "Potato___Early_blight"  
-            confidence = 0.942
-            # ---------------------------------------------
+    interpreter = tf.lite.Interpreter(model_path=model_path)
+    interpreter.allocate_tensors()
+    return interpreter
 
-        # Display Top Match Badge
-        is_healthy = "healthy" in top_class.lower()
-        badge_color = "🟢" if is_healthy else "🔴"
-        formatted_name = top_class.replace("__", " - ").replace("_", " ")
+interpreter = load_tflite_model()
 
-        st.markdown(f"### {badge_color} **{formatted_name}**")
-        
-        # Confidence Gauge
-        st.write(f"**Model Confidence:** {confidence * 100:.1f}%")
-        st.progress(float(confidence))
+classes = [
+    'Pepper__bell___Bacterial_spot', 'Pepper__bell___healthy', 'Potato___Early_blight',
+    'Potato___Late_blight', 'Potato___healthy', 'Tomato_Bacterial_spot',
+    'Tomato_Early_blight', 'Tomato_Late_blight', 'Tomato_Leaf_Mold',
+    'Tomato_Septoria_leaf_spot', 'Tomato_Spider_mites_Two_spotted_spider_mite',
+    'Tomato__Target_Spot', 'Tomato__Tomato_YellowLeaf__Curl_Virus',
+    'Tomato__Tomato_mosaic_virus', 'Tomato_healthy'
+]
 
-        st.divider()
+# --- 2. Image Preprocessing for EfficientNet ---
+def preprocess_image(image):
+    # Resize to EfficientNet input dimension (224x224)
+    image = image.resize((224, 224))
+    img_array = np.array(image, dtype=np.float32)
 
-        # Actionable Advice Accordion
-        if not is_healthy:
-            with st.expander("🛠️ Recommended Action & Care Tips", expanded=True):
-                st.markdown("""
-                * **Isolation:** Separate affected plant to prevent airborne spore propagation.
-                * **Treatment:** Apply copper-based fungicide or bio-fungicide weekly.
-                * **Pruning:** Remove and safely discard visibly damaged foliage.
-                * **Watering:** Water at the base of the plant to keep leaf surface dry.
-                """)
+    # EfficientNet-B0 expectation: scale values to [0, 255] float
+    # If your TFLite model was quantized to INT8, cast to np.uint8 instead.
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
+# --- 3. UI Flow ---
+uploaded_file = st.file_uploader('Choose a leaf image...', type=['jpg', 'jpeg', 'png'])
+
+if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert('RGB')
+    st.image(image, caption='Uploaded Image', use_container_width=True)
+    
+    if st.button('Predict Disease'):
+        if interpreter is None:
+            st.error("Model interpreter failed to load.")
         else:
-            st.success("The leaf appears healthy! Keep maintaining current crop care routines.")
+            with st.spinner('Analyzing leaf features...'):
+                # Prepare TFLite input/output details
+                input_details = interpreter.get_input_details()
+                output_details = interpreter.get_output_details()
 
-    else:
-        st.info("👆 Upload an image on the left to start the diagnosis.")
+                # Preprocess input image array
+                input_data = preprocess_image(image)
+
+                # Set input tensor and invoke inference
+                interpreter.set_tensor(input_details[0]['index'], input_data)
+                interpreter.invoke()
+
+                # Extract predictions
+                preds = interpreter.get_tensor(output_details[0]['index'])[0]
+                
+                # Apply Softmax if model output raw logits
+                if np.max(preds) > 1.0 or np.min(preds) < 0.0:
+                    preds = np.exp(preds) / np.sum(np.exp(preds))
+
+                top_idx = np.argmax(preds)
+                confidence = preds[top_idx]
+
+                # Render result card with HTML styling
+                st.markdown(f"""
+                    <div class="result-card">
+                        <div class="result-title">Detection Result</div>
+                        <div class="result-value"><b>Disease:</b> {classes[top_idx].replace('___', ' - ').replace('_', ' ')}</div>
+                        <div class="result-value"><b>Confidence:</b> {confidence:.2%}</div>
+                    </div>
+                """, unsafe_allow_html=True)
